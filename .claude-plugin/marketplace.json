@@ -1,0 +1,5 @@
+{
+  "name": "peach-buddy",
+  "owner": { "name": "RMDS82" },
+  "plugins": [{ "name": "peach-buddy", "source": "./" }]
+}

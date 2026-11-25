@@ -1,0 +1,8 @@
+{
+  "name": "peach-buddy",
+  "version": "0.1.0",
+  "description": "An animated Claude character in a side pane that reacts to what Claude is doing",
+  "author": { "name": "RMDS82" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}
