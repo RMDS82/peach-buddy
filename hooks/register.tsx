@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Mood } from '../types'
+import type { Bubble, Mood } from '../types'
 
 const PANE = 'peach-buddy'
 const TITLE = 'Claude'
@@ -9,6 +9,18 @@ const TITLE = 'Claude'
 const mood = atom({ plugin: 'peach-buddy', key: 'mood' } as const, 'idle' as Mood, {
   shape: 'mood-1',
 })
+
+const bubble = atom({ plugin: 'peach-buddy', key: 'bubble' } as const, null as Bubble | null, {
+  shape: 'bubble-1',
+})
+
+// The model the session's last step ran on, so questions go to the same one.
+let sessionModel = 'sonnet'
+
+const PERSONA = `You are Buddy, a small, warm, peach-coloured companion who lives in a side panel of Claude Code.
+Answer the user's question helpfully and correctly, in a friendly, lightly playful voice.
+Be brief: at most 4 short sentences or a few bullet points, plain text, no headings.
+If a question needs more room or access to their files, say so and suggest asking in the main chat.`
 
 // Module copy of the mood, so the stream only writes when it changes.
 let current: Mood = 'idle'
@@ -93,16 +105,40 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'buddy',
-      description: 'Show the animated Claude character pane',
+      description: 'Open the Claude character pane, or ask it a quick question',
+      argumentHint: '[question]',
     })
     void $.ui.open({ id: PANE, title: TITLE })
     current = await read($, mood)
     return next(e)
   })
 
-  on('command.run', { command: 'buddy' }, async $ => {
+  on('command.run', { command: 'buddy' }, async ($, e) => {
     await $.ui.open({ id: PANE, title: TITLE })
-    return { text: 'Claude pane opened.' }
+    const question = e.args.trim()
+    if (!question) return { text: 'Claude pane opened. Ask me something with /buddy <question>.' }
+
+    await update($, bubble, () => ({ question, status: 'asking', answer: '' }))
+    // The model has no clock of its own: tell it today's date (UTC, e.g. "Wed, 25 Nov 2026").
+    const today = new Date(await $.clock.now()).toUTCString().slice(0, 16)
+    const result = await $.model.complete({
+      model: sessionModel,
+      system: `${PERSONA}\nToday's date is ${today}.`,
+      prompt: question,
+      maxTokens: 500,
+      effort: 'low',
+      timeoutMs: 60_000,
+    })
+    if (result.isAnswered) {
+      await update($, bubble, () => ({ question, status: 'answered', answer: result.text.trim() }))
+      return { text: 'Buddy answered in the Claude pane.' }
+    }
+    await update($, bubble, () => ({
+      question,
+      status: 'failed',
+      answer: "Sorry, I couldn't get an answer just now. Try again in a moment.",
+    }))
+    return { text: `Buddy couldn't answer (${result.reason}).` }
   })
 
   on('turn.start', async ($, e, next) => {
@@ -111,6 +147,7 @@ export const register: Register = on => {
   })
 
   on('turn.step', async function* ($, e, next) {
+    sessionModel = e.model
     await setMood($, 'thinking')
     const stream = next(e)
     while (true) {
@@ -134,16 +171,34 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box } = $.ui.resolve(e)
+    const { Box, Text } = $.ui.resolve(e)
     const m = await read($, mood)
+    const b = await read($, bubble)
+    // While it composes an answer of its own, it talks.
+    const face: Mood = b?.status === 'asking' ? 'writing' : m
+
+    const speech = b ? (
+      <Box flexDirection="column" borderStyle="round" borderColor={PEACH} backgroundColor="#B4583A" paddingX={1} marginTop={1}>
+        <Text color="#F9DCC8" size="caption">You: {b.question}</Text>
+        <Text color="#FFF4EC">{b.status === 'asking' ? 'Hmm, let me think…' : b.answer}</Text>
+      </Box>
+    ) : (
+      <Text color="#F9DCC8" size="caption">Ask me something: /buddy your question</Text>
+    )
+
     if (e.surface === 'terminal') {
-      const { Text } = $.ui.resolve(e)
-      return <Text>{ALT[m]}</Text>
+      return (
+        <Box flexDirection="column">
+          <Text>{ALT[face]}</Text>
+          {speech}
+        </Box>
+      )
     }
     const { Svg } = $.ui.resolve(e)
     return (
-      <Box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1} backgroundColor={BG}>
-        <Svg source={svgFor(m)} alt={ALT[m]} isInteractive />
+      <Box flexDirection="column" alignItems="center" flexGrow={1} backgroundColor={BG} padding={1}>
+        <Svg source={svgFor(face)} alt={ALT[face]} isInteractive />
+        {speech}
       </Box>
     )
   })

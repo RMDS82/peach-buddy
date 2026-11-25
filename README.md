@@ -8,7 +8,9 @@ It reacts to what Claude is doing:
 - **Thinking or running tools:** looks up while three small dots orbit it.
 - **Writing a reply:** its mouth moves as the text streams in.
 
-The motion is deliberately subtle, and all animation stops when the system's "Reduce motion" setting is on. Type `/buddy` to reopen the pane if you close it. In a plain terminal, which can't draw vector graphics, the pane shows a one-line description of the current state instead.
+Ask it a quick question with `/buddy <question>`: Buddy answers in a speech bubble under the orb, in a short, friendly voice, using the same Claude model as your session. It doesn't see your conversation or files, so it's for quick side questions.
+
+The motion is deliberately subtle, and all animation stops when the system's "Reduce motion" setting is on. Type `/buddy` on its own to reopen the pane if you close it. In a plain terminal, which can't draw vector graphics, the pane shows a one-line description of the current state instead.
 
 ## Install
 
